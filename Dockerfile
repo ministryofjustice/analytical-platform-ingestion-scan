@@ -21,4 +21,4 @@ COPY --chown=nobody:nobody --chmod=0755 src/var/task/ ${LAMBDA_TASK_ROOT}
 RUN python -m pip install --no-cache-dir --upgrade pip==24.0 \
     && python -m pip install --no-cache-dir --requirement requirements.txt
 
-CMD ["handler.handler"]
+CMD ["handler_new.handler"]
