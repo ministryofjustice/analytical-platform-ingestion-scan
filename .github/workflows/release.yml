@@ -53,7 +53,7 @@ jobs:
         run: |
           cosign sign --yes "374269020027.dkr.ecr.eu-west-2.amazonaws.com/analytical-platform-ingestion-scan@${STEPS_BUILD_AND_PUSH_OUTPUTS_DIGEST}"
         env:
-            STEPS_BUILD_AND_PUSH_OUTPUTS_DIGEST: ${{ steps.build_and_push.outputs.digest }}
+          STEPS_BUILD_AND_PUSH_OUTPUTS_DIGEST: ${{ steps.build_and_push.outputs.digest }}
 
       - name: Verify
         id: verify
