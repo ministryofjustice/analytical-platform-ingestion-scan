@@ -183,17 +183,22 @@ def update_tags(
         Bucket=bucket_name,
         Key=object_key,
     )
-    tags = response.get("TagSet", [])
+
+    existing_tags = response.get("TagSet", [])
 
     additional_tags = {
         "scan-result": scan_result,
         "scan-time": scan_time,
     }
 
+    # Convert existing tags to a dict for easy replacement.
+    tag_dict = {tag["Key"]: tag["Value"] for tag in existing_tags}
+
+    # Update with new tags (this will replace any keys that already exist).
+    tag_dict.update(additional_tags)
+
     # Merge existing tags with additional tags.
-    tags.extend(
-        [{"Key": key, "Value": value} for key, value in additional_tags.items()]
-    )
+    tags = [{"Key": key, "Value": value} for key, value in tag_dict.items()]
 
     s3_client.put_object_tagging(
         Bucket=bucket_name,
