@@ -79,7 +79,7 @@ def scan(event):
     for ev in event["Records"]:
         # Compatibility with SQS queue of S3 events
         if ev["eventSource"] == "aws:sqs":
-            s3_events["Records"].append(json.loads(ev["body"]))
+            s3_events["Records"].extend(json.loads(ev["body"])["Records"])
         elif ev["eventSource"] == "aws:s3":
             s3_events["Records"].append(ev)
 
