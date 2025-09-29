@@ -75,32 +75,40 @@ def definition_download():
 
 
 def scan(event):
-    # event_json = json.loads(event_data)
-    object_key = event["Records"][0]["s3"]["object"]["key"]
-    object_name = object_key.split("/")[-1]
+    s3_events = {"Records": []}
+    for ev in event["Records"]:
+        # Compatibility with SQS queue of S3 events
+        if ev["eventSource"] == "aws:sqs":
+            s3_events["Records"].extend(json.loads(ev["body"])["Records"])
+        elif ev["eventSource"] == "aws:s3":
+            s3_events["Records"].append(ev)
 
-    # Create the directory for running the scan
-    os.makedirs("/tmp/clamav/scan", exist_ok=True)
+    for record in s3_events["Records"]:
+        object_key = record["s3"]["object"]["key"]
+        object_name = object_key.split("/")[-1]
 
-    # Download the file to scan
-    landing_bucket_name = os.environ.get("LANDING_BUCKET_NAME")
-    if not landing_bucket_name:
-        raise ValueError("LANDING_BUCKET_NAME environment variable not set.")
-    s3_client.download_file(
-        landing_bucket_name, object_key, f"/tmp/clamav/scan/{object_name}"
-    )
+        # Create the directory for running the scan
+        os.makedirs("/tmp/clamav/scan", exist_ok=True)
 
-    # Scan the test file
-    exit_code, stdout, _ = run_command(
-        f"clamscan --database=/tmp/clamav/database /tmp/clamav/scan/{object_name}"
-    )
-    print(stdout)
-    if exit_code == 0:
-        print("Scan result: Clean")
-        move_to_processed(object_key)
-    else:
-        print("Scan result: Infected")
-        move_to_quarantine(object_key)
+        # Download the file to scan
+        landing_bucket_name = os.environ.get("LANDING_BUCKET_NAME")
+        if not landing_bucket_name:
+            raise ValueError("LANDING_BUCKET_NAME environment variable not set.")
+        s3_client.download_file(
+            landing_bucket_name, object_key, f"/tmp/clamav/scan/{object_name}"
+        )
+
+        # Scan the test file
+        exit_code, stdout, _ = run_command(
+            f"clamscan --database=/tmp/clamav/database /tmp/clamav/scan/{object_name}"
+        )
+        print(stdout)
+        if exit_code == 0:
+            print("Scan result: Clean")
+            move_to_processed(object_key)
+        else:
+            print("Scan result: Infected")
+            move_to_quarantine(object_key)
 
 
 def move_to_processed(object_key):
@@ -175,17 +183,22 @@ def update_tags(
         Bucket=bucket_name,
         Key=object_key,
     )
-    tags = response.get("TagSet", [])
+
+    existing_tags = response.get("TagSet", [])
 
     additional_tags = {
         "scan-result": scan_result,
         "scan-time": scan_time,
     }
 
+    # Convert existing tags to a dict for easy replacement.
+    tag_dict = {tag["Key"]: tag["Value"] for tag in existing_tags}
+
+    # Update with new tags (this will replace any keys that already exist).
+    tag_dict.update(additional_tags)
+
     # Merge existing tags with additional tags.
-    tags.extend(
-        [{"Key": key, "Value": value} for key, value in additional_tags.items()]
-    )
+    tags = [{"Key": key, "Value": value} for key, value in tag_dict.items()]
 
     s3_client.put_object_tagging(
         Bucket=bucket_name,
