@@ -29,7 +29,7 @@ docker build --platform linux/amd64 --file Dockerfile --tag analytical-platform.
 ### Run
 
 ```bash
-docker run -it --rm \
+docker run -it bash --rm \
   --platform linux/amd64 \
   --hostname ingestion-scan \
   --name analytical-platform-ingestion-scan \
@@ -56,7 +56,7 @@ docker run -it --rm --platform linux/amd64 --entrypoint /bin/bash public.ecr.aws
 
 microdnf update
 
-microdnf repoquery ${PACKAGE} # for example clamav, clamav-update or clamd
+microdnf repoquery ${PACKAGE} # for example clamav1.4, or clamd1.4
 ```
 
 ## Maintenance
