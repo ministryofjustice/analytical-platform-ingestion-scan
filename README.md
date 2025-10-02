@@ -29,7 +29,7 @@ docker build --platform linux/amd64 --file Dockerfile --tag analytical-platform.
 ### Run
 
 ```bash
-docker run -it bash --rm \
+docker run -it --rm \
   --platform linux/amd64 \
   --hostname ingestion-scan \
   --name analytical-platform-ingestion-scan \
