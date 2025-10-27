@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from datetime import datetime
+import traceback 
 
 import boto3
 import botocore.exceptions
@@ -9,215 +10,240 @@ import botocore.exceptions
 s3_client = boto3.client("s3")
 scan_time = datetime.now().isoformat()
 
-
 def run_command(command):
-    result = subprocess.run(  # pylint: disable=subprocess-run-check
-        command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    return (
-        result.returncode,
-        result.stdout.decode("utf-8"),
-        result.stderr.decode("utf-8"),
-    )
-
-
-def definition_upload():
-    try:
-        # Create the directory to store the definitions
-        os.makedirs("/tmp/clamav/database", exist_ok=True)
-
-        # Pull the latest definitions
-        user_id = run_command("id --user")[1].strip()
-        clamav_config = os.environ.get("LAMBDA_TASK_ROOT", "") + "/freshclam.conf"
-        run_command(
-            f'freshclam --no-warnings --user {user_id} --config-file="{clamav_config}"'
-        )
-
-        # Archive the definitions
-        run_command(
-            "tar --create --gzip --verbose --file=/tmp/clamav/clamav.tar.gz -C /tmp/clamav/database ."
-        )
-
-        # Upload the definitions to S3
-        bucket_name = os.environ.get("CLAMAV_DEFINITON_BUCKET_NAME")
-        if not bucket_name:
-            raise ValueError(
-                "CLAMAV_DEFINITON_BUCKET_NAME environment variable not set."
-            )
-        s3_client.upload_file("/tmp/clamav/clamav.tar.gz", bucket_name, "clamav.tar.gz")
-    except botocore.exceptions.ClientError as e:
-        print(f"Failed to upload ClamAV definitions: {e}")
-
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    return (result.returncode, result.stdout.decode("utf-8"), result.stderr.decode("utf-8"))
 
 def definition_download():
-    try:
-        # Create the directory to store the definitions
-        os.makedirs("/tmp/clamav/database", exist_ok=True)
+    os.makedirs("/tmp/clamav/database", exist_ok=True)
+    bucket_name = os.environ.get("CLAMAV_DEFINITON_BUCKET_NAME")
+    if not bucket_name:
+        raise ValueError("CLAMAV_DEFINITON_BUCKET_NAME environment variable not set.")
+    s3_client.download_file(bucket_name, "clamav.tar.gz", "/tmp/clamav/clamav.tar.gz")
+    print("Successfully downloaded ClamAV definitions from S3.")
+    run_command("tar --extract --gzip --verbose --file=/tmp/clamav/clamav.tar.gz -C /tmp/clamav/database")
+    print("Successfully extracted ClamAV definitions.")
 
-        # Download the definitions from S3
-        bucket_name = os.environ.get("CLAMAV_DEFINITON_BUCKET_NAME")
-        if not bucket_name:
-            raise ValueError(
-                "CLAMAV_DEFINITON_BUCKET_NAME environment variable not set."
-            )
-        s3_client.download_file(
-            bucket_name, "clamav.tar.gz", "/tmp/clamav/clamav.tar.gz"
-        )
-        print("Successfully downloaded ClamAV definitions from S3.")
-
-        # Extract the definitions
-        run_command(
-            "tar --extract --gzip --verbose --file=/tmp/clamav/clamav.tar.gz -C /tmp/clamav/database"
-        )
-        print("Successfully extracted ClamAV definitions.")
-    except botocore.exceptions.ClientError as e:
-        print(f"Failed to download or extract ClamAV definitions: {e}")
-
-
-def scan(event):
-    # event_json = json.loads(event_data)
-    object_key = event["Records"][0]["s3"]["object"]["key"]
-    object_name = object_key.split("/")[-1]
-
-    # Create the directory for running the scan
-    os.makedirs("/tmp/clamav/scan", exist_ok=True)
-
-    # Download the file to scan
-    landing_bucket_name = os.environ.get("LANDING_BUCKET_NAME")
-    if not landing_bucket_name:
-        raise ValueError("LANDING_BUCKET_NAME environment variable not set.")
-    s3_client.download_file(
-        landing_bucket_name, object_key, f"/tmp/clamav/scan/{object_name}"
-    )
-
-    # Scan the test file
-    exit_code, stdout, _ = run_command(
-        f"clamscan --database=/tmp/clamav/database /tmp/clamav/scan/{object_name}"
-    )
-    print(stdout)
-    if exit_code == 0:
-        print("Scan result: Clean")
-        move_to_processed(object_key)
-    else:
-        print("Scan result: Infected")
-        move_to_quarantine(object_key)
-
-
-def move_to_processed(object_key):
-    try:
-        processed_bucket_name = os.environ.get("PROCESSED_BUCKET_NAME")
-        if not processed_bucket_name:
-            raise ValueError("PROCESSED_BUCKET_NAME environment variable not set.")
-        # Move the file to the processed bucket
-        copy_source = {"Bucket": os.environ["LANDING_BUCKET_NAME"], "Key": object_key}
-        s3_client.copy_object(
-            Bucket=processed_bucket_name, CopySource=copy_source, Key=object_key
-        )
-        s3_client.delete_object(
-            Bucket=os.environ["LANDING_BUCKET_NAME"], Key=object_key
-        )
-
-        # Tag the file with the scan result
-        update_tags(
-            bucket_name=processed_bucket_name,
-            object_key=object_key,
-            scan_result="clean",
-        )
-
-        print("File moved to processed and tagged")
-
-    except botocore.exceptions.ClientError as e:
-        print(f"Failed to move file to processed: {e}")
-
-
-def move_to_quarantine(object_key):
-    try:
-        quarantine_bucket_name = os.environ.get("QUARANTINE_BUCKET_NAME")
-        if not quarantine_bucket_name:
-            raise ValueError("QUARANTINE_BUCKET_NAME environment variable not set.")
-        # Move the file to the quarantine bucket
-        copy_source = {"Bucket": os.environ["LANDING_BUCKET_NAME"], "Key": object_key}
-        s3_client.copy_object(
-            Bucket=quarantine_bucket_name, CopySource=copy_source, Key=object_key
-        )
-        s3_client.delete_object(
-            Bucket=os.environ["LANDING_BUCKET_NAME"], Key=object_key
-        )
-
-        # Tag the file with the scan result
-        update_tags(
-            bucket_name=quarantine_bucket_name,
-            object_key=object_key,
-            scan_result="infected",
-        )
-        print("File moved to quarantine and tagged")
-
-    except botocore.exceptions.ClientError as e:
-        print(f"Failed to move file to quarantine: {e}")
-
-
-def update_tags(
-    bucket_name: str,
-    object_key: str,
-    scan_result: str,
-) -> None:
-    """Add tags for result of file scan to onject.
-
-    This will append two new tags on top of any existing object tags:
-    * scan-time
-    * scan-result
-
-    Note, if any tags are present with the same name, this will not overwrite
-    the tag with the same name, it will attempt to add the tag twice.
+def run_scan(file_path):
     """
-    # Retrieve existing tags for the object.
-    response = s3_client.get_object_tagging(
-        Bucket=bucket_name,
-        Key=object_key,
+    Runs the clamscan command on a file.
+    Returns: A tuple of (status, detail)
+             e.g., ("clean", None) or ("infected", "Win.Test.EICAR_HDB-1")
+    """
+    exit_code, stdout, stderr = run_command(
+        f"clamscan --database=/tmp/clamav/database \"{file_path}\""
     )
-    tags = response.get("TagSet", [])
+    
+    print(stdout)
+    if stderr:
+        print(f"ClamAV stderr: {stderr}")
+    
+    if exit_code == 0:
+        return ("clean", None)
+    
+    if exit_code == 1:
+        # Parse stdout for the virus name
+        virus_name = "Unknown"
+        for line in stdout.split('\n'):
+            if line.strip().endswith(" FOUND"):
+                try:
+                    # Parse "filename: virus-name FOUND"
+                    virus_name = line.split(': ')[1].replace(' FOUND', '').strip()
+                    break # Found it
+                except Exception:
+                    pass # Failed to parse, will use "Unknown"
+        return ("infected", virus_name)
+    
+    # ClamAV returned an error code (like 2)
+    raise Exception(f"ClamAV scan error. Exit code: {exit_code}. STDERR: {stderr}")
+
+def update_tags(bucket_name: str, object_key: str, status: str, detail: str = None):
+    """
+    Adds tags for the result of a file scan to an object.
+    'status' is "clean", "infected", or "error".
+    'detail' is the virus name or error message.
+    """
+    try:
+        response = s3_client.get_object_tagging(Bucket=bucket_name, Key=object_key)
+        tags = response.get("TagSet", [])
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchTaggingSet':
+            tags = []
+        else:
+            print(f"Failed to get tags for {object_key}: {e}")
+            tags = [] # Default to empty list on other errors
 
     additional_tags = {
-        "scan-result": scan_result,
+        "scan-result": status,
         "scan-time": scan_time,
     }
 
-    # Merge existing tags with additional tags.
-    tags.extend(
-        [{"Key": key, "Value": value} for key, value in additional_tags.items()]
-    )
+    if status == "infected" and detail:
+        additional_tags["virus-name"] = detail
+    elif status == "error" and detail:
+        # S3 tags cannot contain newlines
+        safe_error = detail.replace('\n', ' ').replace('\r', ' ')
+        additional_tags["scan-error"] = safe_error[:250]
+
+    # Remove any existing tags with the same key
+    tags_to_keep = [t for t in tags if t['Key'] not in additional_tags]
+    tags_to_keep.extend([{"Key": key, "Value": value} for key, value in additional_tags.items()])
 
     s3_client.put_object_tagging(
         Bucket=bucket_name,
         Key=object_key,
-        Tagging={"TagSet": tags},
+        Tagging={"TagSet": tags_to_keep},
     )
 
-
-def handler(event, context):  # pylint: disable=unused-argument
-    print("Received event:", event)
-    try:
-        mode = os.environ.get("MODE")
-        if mode == "definition-upload":
-            definition_upload()
-        elif mode == "scan":
-            definition_download()
-            scan(event)
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
-    except ValueError as e:
-        print(f"Configuration Error: {e}")
-        return {"statusCode": 400, "body": json.dumps({"message": str(e)})}
-    except botocore.exceptions.ClientError as e:
-        print(f"AWS Client Error: {e}")
-        return {"statusCode": 500, "body": json.dumps({"message": "AWS service error"})}
-    except Exception as e:  # pylint: disable=broad-except
-        print(f"Unexpected Error: {type(e).__name__}, {e}")
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"message": "An unexpected error occurred"}),
-        }
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "Operation completed successfully"}),
+def move_and_tag_files(destination_bucket: str, scan_results_map: dict):
+    """
+    Moves files and applies individual tags based on the scan_results_map.
+    scan_results_map = {
+        "key1": ("clean", None),
+        "key2": ("infected", "EICAR-Test-File"),
+        "key3": ("error", "ClamAV scan error")
     }
+    """
+    landing_bucket_name = os.environ["LANDING_BUCKET_NAME"]
+    
+    for object_key, (status, detail) in scan_results_map.items():
+        try:
+            print(f"Moving {object_key} to {destination_bucket} with status: {status}")
+            copy_source = {"Bucket": landing_bucket_name, "Key": object_key}
+            
+            s3_client.copy_object(
+                Bucket=destination_bucket, CopySource=copy_source, Key=object_key
+            )
+            s3_client.delete_object(
+                Bucket=landing_bucket_name, Key=object_key
+            )
+            
+            # Tag the object in its new location
+            update_tags(
+                bucket_name=destination_bucket,
+                object_key=object_key,
+                status=status,
+                detail=detail
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] in ['404', 'NoSuchKey']:
+                print(f"File {object_key} was already processed by a concurrent invocation.")
+            else:
+                print(f"FATAL: Could not move or tag {object_key}. Error: {e}")
+                traceback.print_exc()
+
+def handler(event, context):
+    print("Received event:", event)
+    
+    landing_bucket = os.environ["LANDING_BUCKET_NAME"]
+    processed_bucket = os.environ["PROCESSED_BUCKET_NAME"]
+    quarantine_bucket = os.environ["QUARANTINE_BUCKET_NAME"]
+    
+    file_keys_to_process = []
+    folder_keys_to_move = []
+    
+    try:
+        triggering_object_key = event["Records"][0]["s3"]["object"]["key"]
+        
+        if not triggering_object_key.endswith('_commit.json'):
+            print(f"Ignoring non-commit-file trigger: {triggering_object_key}")
+            return {"statusCode": 200, "body": json.dumps({"message": "Trigger ignored."})}
+            
+        directory = os.path.dirname(triggering_object_key)
+        prefix = directory + "/" if directory else ""
+        
+        # List all files and folder objects in the batch
+        paginator = s3_client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=landing_bucket, Prefix=prefix):
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    if not obj['Key'].endswith('/'):
+                        file_keys_to_process.append(obj['Key'])
+                    else:
+                        folder_keys_to_move.append(obj['Key']) # Track folder objects
+
+        if not file_keys_to_process:
+            raise Exception(f"No files found in batch prefix: {prefix}")
+            
+        print(f"Processing batch. Prefix: {prefix}. Files: {file_keys_to_process}")
+
+        # Setup scanner
+        os.makedirs("/tmp/clamav/scan", exist_ok=True)
+        definition_download()
+        
+        # Scan all files and build a results map
+        scan_results_map = {}
+        is_batch_infected_or_error = False
+        
+        for object_key in file_keys_to_process:
+            try:
+                # The commit file is safe, just mark it as clean
+                if object_key.endswith('_commit.json'):
+                    scan_results_map[object_key] = ("clean", None)
+                    continue
+
+                print(f"Scanning file: {object_key}")
+                local_file_path = f"/tmp/clamav/scan/{os.path.basename(object_key)}"
+                s3_client.download_file(landing_bucket, object_key, local_file_path)
+                
+                status, detail = run_scan(local_file_path)
+                scan_results_map[object_key] = (status, detail)
+                
+                if status == "infected":
+                    print(f"INFECTED: {object_key}, Virus: {detail}")
+                    is_batch_infected_or_error = True
+                else:
+                    print(f"CLEAN: {object_key}")
+                
+                os.remove(local_file_path)
+                
+            except Exception as e:
+                # Handle error on a *single file scan*
+                print(f"ERROR scanning {object_key}: {e}")
+                traceback.print_exc()
+                scan_results_map[object_key] = ("error", str(e))
+                is_batch_infected_or_error = True
+
+        # Move the entire batch based on the final result
+        if is_batch_infected_or_error:
+            print("Batch contains infected or errored files. Moving all files to quarantine.")
+            move_and_tag_files(quarantine_bucket, scan_results_map)
+            # Also move the folder objects to quarantine
+            for key in folder_keys_to_move:
+                print(f"Moving folder {key} to quarantine")
+                s3_client.copy_object(Bucket=quarantine_bucket, CopySource={"Bucket": landing_bucket, "Key": key}, Key=key)
+                s3_client.delete_object(Bucket=landing_bucket, Key=key)
+        else:
+            print("Batch is clean. Moving all files to processed.")
+            move_and_tag_files(processed_bucket, scan_results_map)
+            # Delete the empty folder objects from landing
+            for key in folder_keys_to_move:
+                print(f"Deleting clean folder object: {key}")
+                s3_client.delete_object(Bucket=landing_bucket, Key=key)
+
+    except Exception as e:
+        # Catch-all for *system* errors (e.g., definition download fails)
+        print(f"A system error occurred during batch processing: {e}")
+        traceback.print_exc()
+        
+        # Create an error map for all files we know about
+        error_results_map = {}
+        for key in file_keys_to_process:
+            if key not in error_results_map:
+                error_results_map[key] = ("error", str(e))
+        
+        if not error_results_map: # Failed before we listed files
+             error_results_map[event["Records"][0]["s3"]["object"]["key"]] = ("error", str(e))
+
+        print("Moving all known batch files to quarantine due to system error.")
+        move_and_tag_files(quarantine_bucket, error_results_map)
+        
+        # Also move the folder objects to quarantine
+        for key in folder_keys_to_move:
+            print(f"Moving error folder {key} to quarantine")
+            s3_client.copy_object(Bucket=quarantine_bucket, CopySource={"Bucket": landing_bucket, "Key": key}, Key=key)
+            s3_client.delete_object(Bucket=landing_bucket, Key=key)
+        
+        return {"statusCode": 500, "body": json.dumps({"message": "An error occurred"})}
+
+    return {"statusCode": 200, "body": json.dumps({"message": "Batch processed successfully"})}
