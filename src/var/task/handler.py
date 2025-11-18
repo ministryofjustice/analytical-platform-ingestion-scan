@@ -1,8 +1,10 @@
 import json
 import os
 import subprocess
+import uuid
+import yaml
 from datetime import datetime
-import traceback 
+import traceback
 
 import boto3
 import botocore.exceptions
@@ -54,6 +56,11 @@ def definition_upload():
         raise
 
 def definition_download():
+
+    # This prevents /tmp from filling up on warm starts
+    print("Cleaning up /tmp directory...")
+    run_command("rm -rf /tmp/clamav")
+
     os.makedirs("/tmp/clamav/database", exist_ok=True)
     bucket_name = os.environ.get("CLAMAV_DEFINITON_BUCKET_NAME")
     if not bucket_name:
@@ -120,8 +127,10 @@ def update_tags(bucket_name: str, object_key: str, status: str, detail: str = No
     if status == "infected" and detail:
         additional_tags["virus-name"] = detail
     elif status == "error" and detail:
-        # S3 tags cannot contain newlines
-        safe_error = detail.replace('\n', ' ').replace('\r', ' ')
+        # S3 tags cannot contain newlines, carriage returns, or tabs.
+        safe_error = detail.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').strip()
+        if not safe_error:
+            safe_error = "UnknownError"
         additional_tags["scan-error"] = safe_error[:250]
 
     # Remove any existing tags with the same key
@@ -134,9 +143,23 @@ def update_tags(bucket_name: str, object_key: str, status: str, detail: str = No
         Tagging={"TagSet": tags_to_keep},
     )
 
-def move_and_tag_files(destination_bucket: str, scan_results_map: dict):
+def get_destination_key(original_key: str, batch_prefix: str, new_prefix: str = None):
+    """
+    If new_prefix is provided (for partners), replaces the batch_prefix with new_prefix.
+    Otherwise (for UI), keeps the original key structure.
+    """
+    if new_prefix:
+        # Example: original="partners/p1/incoming/file.csv", batch_prefix="partners/p1/incoming/"
+        # filename="file.csv", result="new_table/new_db/date/uuid/file.csv"
+        filename = original_key.replace(batch_prefix, "")
+        return f"{new_prefix}{filename}"
+    return original_key
+
+def move_and_tag_files(destination_bucket: str, scan_results_map: dict, batch_prefix: str, new_prefix: str = None):
     """
     Moves files and applies individual tags based on the scan_results_map.
+    If new_prefix is set (partner upload), constructs the new path structure.
+    Ensures _commit.json is moved LAST to prevent downstream race conditions.
     scan_results_map = {
         "key1": ("clean", None),
         "key2": ("infected", "EICAR-Test-File"),
@@ -144,26 +167,32 @@ def move_and_tag_files(destination_bucket: str, scan_results_map: dict):
     }
     """
     landing_bucket_name = os.environ["LANDING_BUCKET_NAME"]
+
+    # Sort keys to ensure _commit.json moves last ---
+    sorted_keys = sorted(scan_results_map.keys(), key=lambda k: k.endswith('_commit.json'))
     
-    for object_key, (status, detail) in scan_results_map.items():
+    for object_key in sorted_keys:
+        status, detail = scan_results_map[object_key]
+
         try:
-            print(f"Moving {object_key} to {destination_bucket} with status: {status}")
-            copy_source = {"Bucket": landing_bucket_name, "Key": object_key}
+            # Determine the new key structure
+            dest_key = get_destination_key(object_key, batch_prefix, new_prefix)
+            print(f"Moving {object_key} to {destination_bucket}/{dest_key} with status: {status}")
             
+            copy_source = {"Bucket": landing_bucket_name, "Key": object_key}
+
             s3_client.copy_object(
-                Bucket=destination_bucket, CopySource=copy_source, Key=object_key
+                Bucket=destination_bucket, CopySource=copy_source, Key=dest_key
             )
             s3_client.delete_object(
                 Bucket=landing_bucket_name, Key=object_key
             )
             
-            # Tag the object in its new location
             update_tags(
                 bucket_name=destination_bucket,
-                object_key=object_key,
+                object_key=dest_key,
                 status=status,
-                detail=detail
-            )
+                detail=detail)
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] in ['404', 'NoSuchKey']:
                 print(f"File {object_key} was already processed by a concurrent invocation.")
@@ -171,16 +200,70 @@ def move_and_tag_files(destination_bucket: str, scan_results_map: dict):
                 print(f"FATAL: Could not move or tag {object_key}. Error: {e}")
                 traceback.print_exc()
 
+def validate_and_get_partner_path(bucket, batch_prefix, files_in_batch):
+    """
+    Checks for metadata.yaml/yml, validates content, and returns new path prefix.
+    Returns: (new_prefix_string) or Raises Exception
+    """
+    print("Partner upload detected. Validating metadata...")
+    
+    # Find metadata file
+    metadata_key = None
+    for key in files_in_batch:
+        if key.endswith("metadata.yaml") or key.endswith("metadata.yml"):
+            metadata_key = key
+            break
+    
+    if not metadata_key:
+        raise Exception("Partner upload missing required 'metadata.yaml' or 'metadata.yml' file.")
+    
+    # Download and parse metadata
+    local_meta_path = f"/tmp/{os.path.basename(metadata_key)}"
+    s3_client.download_file(bucket, metadata_key, local_meta_path)
+    
+    with open(local_meta_path, 'r') as f:
+        try:
+            meta_content = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise Exception(f"Invalid YAML in metadata file: {e}")
+    
+    # Validate fields
+    owner_info = meta_content.get("owner_classification", {})
+    table_name = owner_info.get("table_name")
+    database = owner_info.get("database")
+    
+    # check root level if not found in owner_classification (just in case)
+    if not table_name: table_name = meta_content.get("table_name")
+    if not database: database = meta_content.get("database")
+
+    if not table_name or not database:
+        raise Exception("Metadata missing required fields: 'table_name' and 'database' must be non-null.")
+    
+    # Construct new path
+    # Format: table_name/database/YYYY-MM-DD/uuid/
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    batch_uuid = str(uuid.uuid4())
+    new_prefix = f"{database}/{table_name}/{date_str}/{batch_uuid}/"
+    
+    print(f"Metadata valid. Constructed new path: {new_prefix}")
+    return new_prefix
+
 def handler(event, context):
     """
-    Main Lambda handler. Checks MODE first.
-    If 'definition-upload', runs that task.
-    If 'scan', processes the S3 event.
+    Main Lambda handler. 
+    Checks if triggered by EventBridge for updates, or S3 for scanning.
     """
     print("Received event:", event)
-    mode = os.environ.get("MODE", "scan")
+    
+    # --- Check for EventBridge Scheduled Update ---
+    # If the event contains {"action": "definition-upload"}, force that mode.
+    if event.get("action") == "definition-upload":
+        print("EventBridge trigger detected. Forcing definition-upload mode.")
+        mode = "definition-upload"
+    else:
+        # Otherwise, fallback to the environment variable
+        mode = os.environ.get("MODE", "scan")
 
-    # --- CHECK MODE FIRST ---
     if mode == "definition-upload":
         print("Running in definition-upload mode...")
         try:
@@ -219,6 +302,9 @@ def handler(event, context):
             directory = os.path.dirname(triggering_object_key)
             prefix = directory + "/" if directory else ""
 
+            is_partner_upload = prefix.startswith("partners/")
+            new_partner_prefix = None
+
             paginator = s3_client.get_paginator('list_objects_v2')
             for page in paginator.paginate(Bucket=landing_bucket, Prefix=prefix):
                 if "Contents" in page:
@@ -240,6 +326,9 @@ def handler(event, context):
 
 
             print(f"Processing batch. Prefix: {prefix}. Files: {list(files_to_process.keys())}")
+
+            if is_partner_upload:
+                new_partner_prefix = validate_and_get_partner_path(landing_bucket, prefix, files_to_process.keys())
 
             os.makedirs("/tmp/clamav/scan", exist_ok=True)
             definition_download()
@@ -286,7 +375,8 @@ def handler(event, context):
 
             if is_batch_infected_or_error:
                 print("Batch contains infected, errored, or oversized files. Moving all files to quarantine.")
-                move_and_tag_files(quarantine_bucket, scan_results_map)
+                move_and_tag_files(quarantine_bucket, scan_results_map, prefix, None)
+
                 for key in folder_keys_to_move:
                     print(f"Moving folder {key} to quarantine")
                     try:
@@ -296,7 +386,8 @@ def handler(event, context):
 
             else:
                 print("Batch is clean and within size limits. Moving all files to processed.")
-                move_and_tag_files(processed_bucket, scan_results_map)
+                move_and_tag_files(processed_bucket, scan_results_map, prefix, new_partner_prefix)
+
                 for key in folder_keys_to_move:
                     print(f"Deleting clean folder object: {key}")
                     try: s3_client.delete_object(Bucket=landing_bucket, Key=key)
@@ -319,7 +410,7 @@ def handler(event, context):
                  except Exception: pass
 
             print("Moving all known batch files to quarantine due to system error.")
-            move_and_tag_files(quarantine_bucket, error_results_map if error_results_map else {})
+            move_and_tag_files(quarantine_bucket, error_results_map if error_results_map else {}, prefix if 'prefix' in locals() else "", None)
 
             for key in folder_keys_to_move:
                 print(f"Moving error folder {key} to quarantine")
