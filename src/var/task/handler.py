@@ -129,6 +129,10 @@ def update_tags(bucket_name: str, object_key: str, status: str, detail: str = No
     elif status == "error" and detail:
         # S3 tags cannot contain newlines, carriage returns, or tabs.
         safe_error = detail.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').strip()
+
+        while "  " in safe_error:
+            safe_error = safe_error.replace("  ", " ")
+            
         if not safe_error:
             safe_error = "UnknownError"
         additional_tags["scan-error"] = safe_error[:250]
@@ -330,8 +334,8 @@ def handler(event, context):
             if is_partner_upload:
                 new_partner_prefix = validate_and_get_partner_path(landing_bucket, prefix, files_to_process.keys())
 
-            os.makedirs("/tmp/clamav/scan", exist_ok=True)
             definition_download()
+            os.makedirs("/tmp/clamav/scan", exist_ok=True)
 
             scan_results_map = {}
             is_batch_infected_or_error = False
