@@ -211,12 +211,14 @@ def validate_and_get_partner_path(bucket, batch_prefix, files_in_batch):
     """
     print("Partner upload detected. Validating metadata...")
     
-    # Find metadata file
+    # Find metadata file and optional commit file in the same folder
     metadata_key = None
+    commit_key = None
     for key in files_in_batch:
         if key.endswith("metadata.yaml"):
             metadata_key = key
-            break
+        elif key.endswith("_commit.json"):
+            commit_key = key
     
     if not metadata_key:
         raise Exception("Partner upload missing required 'metadata.yaml' file.")
@@ -246,10 +248,24 @@ def validate_and_get_partner_path(bucket, batch_prefix, files_in_batch):
     if not table_name or not database:
         raise Exception("Metadata missing required fields: 'table_name' and 'database' must be non-null.")
     
+    # Determine batch UUID
+    # Prefer reading from a co-located _commit.json; fallback to generated UUID
+    batch_uuid = None
+    if commit_key:
+        try:
+            local_commit_path = f"/tmp/{os.path.basename(commit_key)}"
+            s3_client.download_file(bucket, commit_key, local_commit_path)
+            with open(local_commit_path, 'r') as cf:
+                commit_json = json.load(cf)
+            batch_uuid = commit_json.get("batch_uuid") or commit_json.get("batchUuid")
+        except Exception as e:
+            print(f"Warning: Failed to read batch_uuid from commit file {commit_key}: {e}. Falling back to generated UUID.")
+    if not batch_uuid:
+        batch_uuid = str(uuid.uuid4())
+
     # Construct new path
-    # Format: table_name/database/YYYY-MM-DD/uuid/
+    # Format: database/table_name/YYYY-MM-DD/uuid/
     date_str = datetime.now().strftime("%Y-%m-%d")
-    batch_uuid = str(uuid.uuid4())
     new_prefix = f"{database}/{table_name}/{date_str}/{batch_uuid}/"
     
     print(f"Metadata valid. Constructed new path: {new_prefix}")
