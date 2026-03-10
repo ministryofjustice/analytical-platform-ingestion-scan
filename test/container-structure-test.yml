@@ -5,12 +5,12 @@ commandTests:
   - name: "clamscan"
     command: "clamscan"
     args: ["--version"]
-    expectedOutput: ["ClamAV 1.4.3"]
+    expectedOutput: ["ClamAV 1.5.1"]
 
   - name: "freshclam"
     command: "freshclam"
     args: ["--version"]
-    expectedOutput: ["ClamAV 1.4.3"]
+    expectedOutput: ["ClamAV 1.5.1"]
 
   - name: "tar"
     command: "tar"
