@@ -6,6 +6,10 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    groups:
+      analytical-platform-github-actions:
+        patterns:
+          - "ministryofjustice/analytical-platform-github-actions*"
   - package-ecosystem: "devcontainers"
     directory: "/"
     schedule:
