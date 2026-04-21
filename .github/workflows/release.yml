@@ -29,20 +29,20 @@ jobs:
 
       - name: Configure AWS Credentials
         id: configure_aws_credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           aws-region: eu-west-2
           role-to-assume: arn:aws:iam::730335344807:role/modernisation-platform-oidc-cicd
 
       - name: Login to Amazon ECR
         id: login_ecr
-        uses: aws-actions/amazon-ecr-login@183a1442edf41672e66566b7fc560e297a290896
+        uses: aws-actions/amazon-ecr-login@376925c9d111252e87ae59691e5a442dd100ef6a
         with:
           registries: 374269020027
 
       - name: Build and Push
         id: build_and_push
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           push: true
           tags: 374269020027.dkr.ecr.eu-west-2.amazonaws.com/analytical-platform-ingestion-scan:${{ github.ref_name }}
