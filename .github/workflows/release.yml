@@ -29,14 +29,14 @@ jobs:
 
       - name: Configure AWS Credentials
         id: configure_aws_credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           aws-region: eu-west-2
           role-to-assume: arn:aws:iam::730335344807:role/modernisation-platform-oidc-cicd
 
       - name: Login to Amazon ECR
         id: login_ecr
-        uses: aws-actions/amazon-ecr-login@183a1442edf41672e66566b7fc560e297a290896
+        uses: aws-actions/amazon-ecr-login@376925c9d111252e87ae59691e5a442dd100ef6a
         with:
           registries: 374269020027
 
