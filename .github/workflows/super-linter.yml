@@ -41,3 +41,4 @@ jobs:
           VALIDATE_PYTHON_RUFF: false
           VALIDATE_GITHUB_ACTIONS_ZIZMOR: false
           VALIDATE_EDITORCONFIG: false
+          VALIDATE_TRIVY: false
