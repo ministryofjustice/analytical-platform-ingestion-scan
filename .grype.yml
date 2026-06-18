@@ -7,3 +7,5 @@ ignore:
   # Patched upstream, awaiting base image update - see README on how to check for updates.
   - vulnerability: ALAS2023-2026-1798
   # Patched upstream, awaiting base image update - see README on how to check for updates.
+  - vulnerability: ALAS2023-2026-1565
+  # Patched upstream, awaiting base image update - actually a Medium finding.
