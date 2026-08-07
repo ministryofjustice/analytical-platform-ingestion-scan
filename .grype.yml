@@ -9,3 +9,19 @@ ignore:
   # Patched upstream, awaiting base image update - see README on how to check for updates.
   - vulnerability: ALAS2023-2026-1565
   # Patched upstream, awaiting base image update - actually a Medium finding.
+  - vulnerability: ALAS2023-2026-2035
+  # Patched upstream (gawk), awaiting base image update - see README on how to check for updates.
+  - vulnerability: ALAS2023-2026-2028
+  # Patched upstream (glib2), awaiting base image update - see README on how to check for updates.
+  - vulnerability: ALAS2023-2026-1992
+  # Patched upstream (libxml2), awaiting base image update - see README on how to check for updates.
+  - vulnerability: CVE-2026-11940
+  # Python binary CVE, fix requires Python 3.15.0 which is not yet available as a Lambda base image.
+  - vulnerability: CVE-2026-15308
+  # Python binary CVE, fix requires Python 3.15.0 which is not yet available as a Lambda base image.
+  - vulnerability: CVE-2026-11972
+  # Python binary CVE, fix requires Python 3.15.0 which is not yet available as a Lambda base image.
+  - vulnerability: GO-2026-5775
+  # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
+  - vulnerability: GO-2026-5777
+  # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
