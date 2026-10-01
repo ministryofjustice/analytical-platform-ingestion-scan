@@ -25,3 +25,29 @@ ignore:
   # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
   - vulnerability: GO-2026-5777
   # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
+  - vulnerability: ALAS2023-2026-2116-clamav1.5
+  # High clamav1.5 RPM advisory, fixed in 1.5.4-1.amzn2023.0.1.
+  - vulnerability: ALAS2023-2026-2116-clamav1.5-filesystem
+  # High clamav1.5-filesystem RPM advisory, fixed in 1.5.4-1.amzn2023.0.1.
+  - vulnerability: ALAS2023-2026-2116-clamav1.5-freshclam
+  # High clamav1.5-freshclam RPM advisory, fixed in 1.5.4-1.amzn2023.0.1.
+  - vulnerability: ALAS2023-2026-2116-clamav1.5-lib
+  # High clamav1.5-lib RPM advisory, fixed in 1.5.4-1.amzn2023.0.1.
+  - vulnerability: ALAS2023-2026-2116-clamd1.5
+  # High clamd1.5 RPM advisory, fixed in 1.5.4-1.amzn2023.0.1.
+  - vulnerability: ALAS2023-2026-3128-curl-minimal
+  # High curl-minimal RPM advisory, fixed in 8.21.0-5.amzn2023.0.2.
+  - vulnerability: ALAS2023-2026-3128-libcurl-minimal
+  # High libcurl-minimal RPM advisory, fixed in 8.21.0-5.amzn2023.0.2.
+  - vulnerability: ALAS2023-2026-3122-libxml2
+  # High libxml2 RPM advisory, fixed in 2.10.4-1.amzn2023.0.21.
+  - vulnerability: CVE-2026-82049
+  # Python binary CVE, fix requires Python 3.14.0b1 or later.
+  - vulnerability: ALAS2023-2026-3125-rpm
+  # High rpm RPM advisory, fixed in 4.16.1.3-29.amzn2023.0.8.
+  - vulnerability: ALAS2023-2026-3125-rpm-libs
+  # High rpm-libs RPM advisory, fixed in 4.16.1.3-29.amzn2023.0.8.
+  - vulnerability: ALAS2023-2026-3119-pcre2
+  # High pcre2 RPM advisory, fixed in 10.40-1.amzn2023.0.4.
+  - vulnerability: ALAS2023-2026-3119-pcre2-syntax
+  # High pcre2-syntax RPM advisory, fixed in 10.40-1.amzn2023.0.4.
