@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+# Install agent package manager dependencies.
+apm install --frozen
+
 # Upgrade Pip
 pip install --upgrade pip
 

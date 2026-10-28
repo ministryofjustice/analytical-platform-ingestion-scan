@@ -5,12 +5,12 @@ commandTests:
   - name: "clamscan"
     command: "clamscan"
     args: ["--version"]
-    expectedOutput: ["ClamAV 1.5.1"]
+    expectedOutput: ["ClamAV 1.5.3"]
 
   - name: "freshclam"
     command: "freshclam"
     args: ["--version"]
-    expectedOutput: ["ClamAV 1.5.1"]
+    expectedOutput: ["ClamAV 1.5.3"]
 
   - name: "tar"
     command: "tar"
@@ -20,7 +20,7 @@ commandTests:
   - name: "pip"
     command: "pip"
     args: ["--version"]
-    expectedOutput: ["pip 24.0"]
+    expectedOutput: ["pip 26.2.1"]
 
 fileExistenceTests:
   - name: "freshclam.conf"
