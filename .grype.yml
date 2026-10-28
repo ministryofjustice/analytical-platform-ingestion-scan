@@ -25,3 +25,17 @@ ignore:
   # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
   - vulnerability: GO-2026-5777
   # go-chi/chi CVE in aws-lambda-rie binary, fix requires base image update - see README on how to check for updates.
+  - vulnerability: ALAS2023-2026-2116
+  # High clamav rpm advisory. Grype matches the advisory ID, not the package-qualified suffix.
+  - vulnerability: ALAS2023-2026-3128
+  # High curl rpm advisory. Grype matches the advisory ID, not the package-qualified suffix.
+  - vulnerability: ALAS2023-2026-3122
+  # Medium libxml2 rpm advisory; kept in line with the current scan findings.
+  - vulnerability: CVE-2026-82049
+  # Python binary CVE, fix requires Python 3.14.0b1 or later.
+  - vulnerability: ALAS2023-2026-3125
+  # High rpm rpm advisory. Grype matches the advisory ID, not the package-qualified suffix.
+  - vulnerability: ALAS2023-2026-3119
+  # High pcre2 rpm advisory. Grype matches the advisory ID, not the package-qualified suffix.
+  - vulnerability: ALAS2023-2026-3117
+  # High rpm advisory currently reported by Grype for the Amazon Linux 2023 runtime packages.
