@@ -1,6 +1,6 @@
 #checkov:skip=CKV_DOCKER_2: HEALTHCHECK not required - AWS Lambda does not support HEALTHCHECK
 #checkov:skip=CKV_DOCKER_3: USER not required - A non-root user is used by AWS Lambda
-FROM public.ecr.aws/lambda/python:3.13@sha256:eb38e04f936efb6260430e996fda2a7bf0b2181069ded6c896b38d5c86530325
+FROM public.ecr.aws/lambda/python:3.13@sha256:fdd994e81bed65fa12467e750f7be5748f9be85be1c13c70c1ce77d5503f14c4
 
 LABEL org.opencontainers.image.vendor="Ministry of Justice" \
       org.opencontainers.image.authors="Analytical Platform (analytical-platform@digital.justice.gov.uk)" \
@@ -17,7 +17,7 @@ RUN microdnf --setopt=amazonlinux.sslverify=0 update \
 
 COPY --chown=nobody:nobody --chmod=0755 src/var/task/ ${LAMBDA_TASK_ROOT}
 
-RUN python -m pip install --no-cache-dir --upgrade pip==26.2.1 \
+RUN python -m pip install --no-cache-dir --upgrade pip==26.2.2 \
     && python -m pip install --no-cache-dir --requirement requirements.txt
 
 CMD ["handler.handler"]
