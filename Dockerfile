@@ -1,6 +1,6 @@
 #checkov:skip=CKV_DOCKER_2: HEALTHCHECK not required - AWS Lambda does not support HEALTHCHECK
 #checkov:skip=CKV_DOCKER_3: USER not required - A non-root user is used by AWS Lambda
-FROM public.ecr.aws/lambda/python:3.13@sha256:fdd994e81bed65fa12467e750f7be5748f9be85be1c13c70c1ce77d5503f14c4
+FROM public.ecr.aws/lambda/python:3.13@sha256:dfc158d4b5cc9cc6bfad4f09ac31f478822c6439f612b61a948edf53ab0dacb9
 
 LABEL org.opencontainers.image.vendor="Ministry of Justice" \
       org.opencontainers.image.authors="Analytical Platform (analytical-platform@digital.justice.gov.uk)" \
@@ -10,8 +10,8 @@ LABEL org.opencontainers.image.vendor="Ministry of Justice" \
 
 RUN microdnf --setopt=amazonlinux.sslverify=0 update \
     && microdnf --setopt=amazonlinux.sslverify=0 install --assumeyes \
-        clamav1.5-1.5.3-1.amzn2023.0.1.x86_64 \
-        clamd1.5-1.5.3-1.amzn2023.0.1.x86_64 \
+        clamav1.5-1.5.4-1.amzn2023.0.1.x86_64 \
+        clamd1.5-1.5.4-1.amzn2023.0.1.x86_64 \
          tar-2:1.34-1.amzn2023.0.4.x86_64 \
     && microdnf clean all
 
