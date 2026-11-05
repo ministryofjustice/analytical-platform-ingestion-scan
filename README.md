@@ -43,8 +43,8 @@ docker run -it --rm \
 Generally Dependabot does this, but the following command will return the digest:
 
 ```bash
-docker pull --platform linux/amd64 public.ecr.aws/lambda/python:3.13
-docker image inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/lambda/python:3.13
+docker pull --platform linux/amd64 public.ecr.aws/lambda/python:3.14
+docker image inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/lambda/python:3.14
 ```
 
 ### DNF Packages
@@ -52,7 +52,7 @@ docker image inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/lambda/p
 To find latest DNF package versions, you can run the following:
 
 ```bash
-docker run -it --rm --platform linux/amd64 --entrypoint /bin/bash public.ecr.aws/lambda/python:3.13
+docker run -it --rm --platform linux/amd64 --entrypoint /bin/bash public.ecr.aws/lambda/python:3.14
 
 microdnf update
 
